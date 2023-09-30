@@ -1,0 +1,16 @@
+version: '3'
+services:
+  ms-storage:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ms-storage
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./static:/app/static
+    environment:
+      - APP_NAME=${APP_NAME}
+      - APP_PORT=${APP_PORT}
+      - APP_HOST=${APP_HOST}
+    restart: always  # Configuración para reinicio automático
