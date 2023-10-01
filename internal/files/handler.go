@@ -3,10 +3,13 @@ package files
 import (
 	"fmt"
 	"io"
+	"log"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	utils_files "github.com/Leonardo-Antonio/ms-storage/pkg/files"
 	"github.com/Leonardo-Antonio/ms-storage/pkg/req"
@@ -77,7 +80,7 @@ func (h *handler) UploadFiles(w http.ResponseWriter, r *http.Request) {
 	userID := vars["userId"]
 
 	// Parsea el formulario con las imágenes
-	err := r.ParseMultipartForm(10 << 20) // Establece un límite de 10MB para los archivos
+	err := r.ParseMultipartForm(300 << 20) // Establece un límite de 10MB para los archivos
 	if err != nil {
 		http.Error(w, "Error parsing form", http.StatusBadRequest)
 		return
@@ -86,38 +89,81 @@ func (h *handler) UploadFiles(w http.ResponseWriter, r *http.Request) {
 	// Obtiene los archivos desde el formulario
 	files := r.MultipartForm.File["images"]
 
-	for _, file := range files {
-		// Abre el archivo
-		src, err := file.Open()
-		if err != nil {
-			http.Error(w, "Error opening file", http.StatusInternalServerError)
-			return
-		}
-		defer src.Close()
-
-		pathSaveFile := fmt.Sprintf("static/%s/", userID)
-		if utils_files.IsVideo(file.Filename) {
-			pathSaveFile += "videos/" + file.Filename
-		} else {
-			pathSaveFile += "images/" + file.Filename
-		}
-
-		dst, err := os.Create(pathSaveFile)
-		if err != nil {
-			http.Error(w, "Error creating destination file", http.StatusInternalServerError)
-			return
-		}
-		defer dst.Close()
-
-		// Copia el contenido del archivo al destino
-		_, err = io.Copy(dst, src)
-		if err != nil {
-			http.Error(w, "Error copying file", http.StatusInternalServerError)
-			return
-		}
+	// Crear directorio base
+	baseDir := fmt.Sprintf("static/%s", userID)
+	if err := os.MkdirAll(baseDir, os.ModePerm); err != nil {
+		log.Println("Error creating base directory:", err)
+		http.Error(w, "Error creating base directory", http.StatusInternalServerError)
+		return
 	}
 
-	// Responde al cliente con una confirmación
+	// Limitar la cantidad de trabajadores concurrentes
+	concurrency := 4 // Puedes ajustar este valor según tus necesidades
+	var wg sync.WaitGroup
+	workQueue := make(chan *multipart.FileHeader, len(files))
+
+	// Inicializar trabajadores
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			for file := range workQueue {
+				processAndSaveFile(file, baseDir)
+				wg.Done()
+			}
+		}()
+	}
+
+	// Agregar trabajos al canal de trabajo
+	for _, file := range files {
+		wg.Add(1)
+		workQueue <- file
+	}
+
+	// Cerrar el canal de trabajo y esperar a que todos los trabajadores finalicen
+	close(workQueue)
+	wg.Wait()
+
+	// Responder al cliente con una confirmación
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Images uploaded successfully")
+}
+
+func processAndSaveFile(file *multipart.FileHeader, baseDir string) {
+	// Abre el archivo
+	src, err := file.Open()
+	if err != nil {
+		log.Println("Error opening file:", err)
+		return
+	}
+	defer src.Close()
+
+	// Determina la ruta del archivo
+	var fileTypeDir string
+	if utils_files.IsVideo(file.Filename) {
+		fileTypeDir = "videos"
+	} else {
+		fileTypeDir = "images"
+	}
+	pathSaveFile := filepath.Join(baseDir, fileTypeDir, file.Filename)
+
+	// Crea el directorio del tipo de archivo si no existe
+	if err := os.MkdirAll(filepath.Join(baseDir, fileTypeDir), os.ModePerm); err != nil {
+		log.Println("Error creating file type directory:", err)
+		return
+	}
+
+	dst, err := os.Create(pathSaveFile)
+	if err != nil {
+		log.Println("Error creating destination file:", err)
+		return
+	}
+	defer dst.Close()
+
+	// Copia el contenido del archivo al destino
+	_, err = io.Copy(dst, src)
+	if err != nil {
+		log.Println("Error copying file:", err)
+		return
+	}
+
+	log.Printf("success => upload file => %s\n", file.Filename)
 }
