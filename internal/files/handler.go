@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	utils_files "github.com/Leonardo-Antonio/ms-storage/pkg/files"
 	"github.com/Leonardo-Antonio/ms-storage/pkg/req"
@@ -143,7 +144,10 @@ func processAndSaveFile(file *multipart.FileHeader, baseDir string) {
 	} else {
 		fileTypeDir = "images"
 	}
-	pathSaveFile := filepath.Join(baseDir, fileTypeDir, file.Filename)
+
+	ext := filepath.Ext(file.Filename)
+	fileName := fmt.Sprintf("%d%s", time.Now().UnixMilli(), ext)
+	pathSaveFile := filepath.Join(baseDir, fileTypeDir, fileName)
 
 	// Crea el directorio del tipo de archivo si no existe
 	if err := os.MkdirAll(filepath.Join(baseDir, fileTypeDir), os.ModePerm); err != nil {
@@ -165,5 +169,5 @@ func processAndSaveFile(file *multipart.FileHeader, baseDir string) {
 		return
 	}
 
-	log.Printf("success => upload file => %s\n", file.Filename)
+	log.Printf("success => %s => upload file => %s\n", fileName, file.Filename)
 }
