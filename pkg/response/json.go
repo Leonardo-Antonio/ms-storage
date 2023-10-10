@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func Json(w http.ResponseWriter, data Response) {
+func Json(w http.ResponseWriter, data Response, statusCode int) {
 	data.TimeStamp = uint64(time.Now().UnixMilli())
 	jsonBytes, err := json.Marshal(&data)
 	if err != nil {
@@ -15,6 +15,6 @@ func Json(w http.ResponseWriter, data Response) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-
+	w.WriteHeader(statusCode)
 	w.Write(jsonBytes)
 }

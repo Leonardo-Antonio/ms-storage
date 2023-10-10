@@ -11,4 +11,5 @@ func init() {
 	router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 	router.HandleFunc("/v1/directory/structure/users/{userId}", handler.GetDirectoryStructure).Methods(http.MethodGet)
 	router.HandleFunc("/v1/files/upload/{userId}", handler.UploadFiles).Methods(http.MethodPost)
+	router.HandleFunc("/v1/files/{name}/{userId}", handler.RemoveFiles).Methods(http.MethodDelete)
 }

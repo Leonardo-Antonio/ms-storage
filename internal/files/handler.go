@@ -18,9 +18,17 @@ import (
 	"github.com/gorilla/mux"
 )
 
-type handler struct{}
+type handler struct {
+	pathVideo string
+	pathImage string
+}
 
-func New() *handler { return &handler{} }
+func New() *handler {
+	return &handler{
+		pathVideo: "static/%s/videos/%s",
+		pathImage: "static/%s/images/%s",
+	}
+}
 
 func (h *handler) GetDirectoryStructure(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -73,7 +81,7 @@ func (h *handler) GetDirectoryStructure(w http.ResponseWriter, r *http.Request) 
 		Success:   true,
 		Data:      root,
 		ItemFound: true,
-	})
+	}, http.StatusOK)
 }
 
 func (h *handler) UploadFiles(w http.ResponseWriter, r *http.Request) {
@@ -126,6 +134,33 @@ func (h *handler) UploadFiles(w http.ResponseWriter, r *http.Request) {
 	// Responder al cliente con una confirmación
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "Images uploaded successfully")
+}
+
+func (h *handler) RemoveFiles(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	var path string
+	if utils_files.IsVideo(vars["name"]) {
+		path = fmt.Sprintf(h.pathVideo, vars["userId"], vars["name"])
+	} else {
+		path = fmt.Sprintf(h.pathImage, vars["userId"], vars["name"])
+	}
+
+	if err := os.Remove(path); err != nil {
+		response.Json(w, response.Response{
+			Success:   false,
+			Data:      path,
+			ItemFound: false,
+			TimeStamp: uint64(time.Now().UnixMilli()),
+		}, http.StatusConflict)
+		return
+	}
+
+	response.Json(w, response.Response{
+		Success:   true,
+		Data:      path,
+		ItemFound: true,
+		TimeStamp: uint64(time.Now().UnixMilli()),
+	}, http.StatusOK)
 }
 
 func processAndSaveFile(file *multipart.FileHeader, baseDir string) {
